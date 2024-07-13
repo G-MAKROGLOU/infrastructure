@@ -13,8 +13,8 @@ var (
 )
 
 // CreateAzureResourceGroup - check is a resource group exists and creates it if it doesn't
-func CreateAzureResourceGroup(rgName string, location string) error {
-	color.Cyan("AZ RESOURCE GROUP | CHECKING IF RESOURCE GROUP %s ALREADY EXISTS", rgName)
+func CreateAzureResourceGroup(details ResourceGroupCreate) error {
+	color.Cyan("AZ RESOURCE GROUP | CHECKING IF RESOURCE GROUP %s ALREADY EXISTS", details.Name)
 
 	color.Cyan("AZ RESOURCE GROUP | RETRIEVING RESOURCE GROUPS")
 	rgError := getResourceGroups()
@@ -23,23 +23,23 @@ func CreateAzureResourceGroup(rgName string, location string) error {
 	}
 	color.Green("AZ RESOURCE GROUP | RESOURCE GROUPS RETRIEVED SUCCESSFULLY")
 
-	exists, existsError := resourceGroupExists(rgName)
+	exists, existsError := resourceGroupExists(details.Name)
 	if existsError != nil {
 		return existsError
 	}
 
 	if !exists {
-		color.Yellow("AZ RESOURCE GROUP | RESOURCE GROUP %s DID NOT EXIST. CREATING IT", rgName)
-		_, rgCreateErr := createResourceGroup(rgName, location)
+		color.Yellow("AZ RESOURCE GROUP | RESOURCE GROUP %s DID NOT EXIST. CREATING IT", details.Name)
+		_, rgCreateErr := createResourceGroup(details)
 
 		if rgCreateErr != nil {
 			return rgCreateErr
 		}
-		color.Green("AZ RESOURCE GROUP | RESOURCE GROUP %s CREATED SUCCESSFULLY", rgName)
+		color.Green("AZ RESOURCE GROUP | RESOURCE GROUP %s CREATED SUCCESSFULLY", details.Name)
 	}
 
 	if exists {
-		color.Yellow("AZ RESOURCE GROUP | RESOURCE GROUP %s ALREADY EXISTS. SKIPPING RESOURCE GROUP CREATION", rgName)
+		color.Yellow("AZ RESOURCE GROUP | RESOURCE GROUP %s ALREADY EXISTS. SKIPPING RESOURCE GROUP CREATION", details.Name)
 	}
 
 	return nil
@@ -79,9 +79,9 @@ func resourceGroupExists(rgName string) (bool, error) {
 	return exists, nil
 }
 
-func createResourceGroup(rgName string, location string) (ResourceGroup, error) {
+func createResourceGroup(details ResourceGroupCreate) (ResourceGroup, error) {
 	var resourceGroup ResourceGroup
-	rgCreateOut, rgCreateErr := exec.Command("az", "group", "create", "--name", rgName, "--location", location).Output()
+	rgCreateOut, rgCreateErr := exec.Command("az", "group", "create", "--name", details.Name, "--location", details.Location).Output()
 
 	if rgCreateErr != nil {
 		return resourceGroup, rgCreateErr

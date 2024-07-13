@@ -11,10 +11,10 @@ var (
 	serviceAccounts []ServiceAccount
 )
 
-func getServiceAccounts(organization string, project string) error {
+func getServiceAccounts(servAccountDetails ServiceAccountGet) error {
 	color.Cyan("AZ DEVOPS | RETRIEVING SERVICE ACCOUNTS TO SELECT FOR THE DEPLOYMENT")
 
-	serviceAccountOut, serviceAccountErr := exec.Command("az", "devops", "service-endpoint", "list", "--organization", organization, "--project", project).Output()
+	serviceAccountOut, serviceAccountErr := exec.Command("az", "devops", "service-endpoint", "list", "--organization", servAccountDetails.Organization, "--project", servAccountDetails.Project).Output()
 	if serviceAccountErr != nil {
 		return serviceAccountErr
 	}

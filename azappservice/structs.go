@@ -44,7 +44,10 @@ type (
 		WorkerTierName            interface{}       `json:"workerTierName"`
 		ZoneRedundant             bool              `json:"zoneRedundant"`
 	}
-
+	// AppServicePlanCreate represents the detauls of the  app service plan to be created
+	AppServicePlanCreate struct {
+		Name          string
+		ResourceGroup string
+		Location      string
+	}
 )
-
-

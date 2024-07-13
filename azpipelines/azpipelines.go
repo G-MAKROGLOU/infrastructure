@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/G-MAKROGLOU/infrastructure"
 	"github.com/fatih/color"
 )
 
@@ -16,11 +15,11 @@ var (
 )
 
 // CreatePipelineFromYaml - creates a pipeline from an existing YAML file
-func CreatePipelineFromYaml(details infrastructure.Pipeline, devopsOrg string) error {
+func CreatePipelineFromYaml(details PipelineCreate) error {
 	color.Cyan("AZ PIPELINES | CHECKING IF PIPELINE %s ALREADY EXISTS", details.Name)
 
 	color.Cyan("AZ PIPELINES | RETRIEVING PIPELINES")
-	rgError := getPipelines(devopsOrg, details.Project)
+	rgError := getPipelines(details.DevOPSOrg, details.Project)
 	if rgError != nil {
 		return rgError
 	}
@@ -34,15 +33,7 @@ func CreatePipelineFromYaml(details infrastructure.Pipeline, devopsOrg string) e
 	if !exists {
 		color.Yellow("AZ PIPELINES | PIPELINE %s DOES NOT EXIST. CREATING IT", details.Name)
 
-		_, pipelineErr := exec.Command("az", "pipelines", "create",
-			"--name", details.Name,
-			"--yaml-path", details.YamlPath,
-			"--project", details.Project,
-			"--repository", details.Repository,
-			"--organization", devopsOrg,
-			"--repository-type", "tfsgit",
-			"--branch", details.Branch,
-			"--skip-run").Output()
+		_, pipelineErr := createPipeline(details)
 
 		if pipelineErr != nil {
 			return pipelineErr
@@ -59,11 +50,11 @@ func CreatePipelineFromYaml(details infrastructure.Pipeline, devopsOrg string) e
 }
 
 // QueuePipeline - queues a deployment pipeline
-func QueuePipeline(pipelineInfo infrastructure.Pipeline, devopsOrg string, parameters []string) (PipelineQueueRes, error) {
+func QueuePipeline(pipelineInfo PipelineCreate, parameters []string) (PipelineQueueRes, error) {
 	var pipelineQueueRes PipelineQueueRes
 	color.Cyan("AZ PIPELINES | QUEUEING PIPELINE %s", pipelineInfo.Name)
 
-	cmd := getQueuePipelineBaseCmd(pipelineInfo.Project, devopsOrg, pipelineInfo.Name)
+	cmd := getQueuePipelineBaseCmd(pipelineInfo.Project, pipelineInfo.DevOPSOrg, pipelineInfo.Name)
 
 	if len(parameters) > 0 {
 		cmd.Args = append(cmd.Args, "--parameters")
@@ -150,6 +141,32 @@ func pipelineExists(pipelineName string) (bool, error) {
 		}
 	}
 	return exists, nil
+}
+
+func createPipeline(details PipelineCreate) (Pipeline, error) {
+	var pipeline Pipeline
+
+	pipelineOut, pipelineErr := exec.Command("az", "pipelines", "create",
+	"--name", details.Name,
+	"--yaml-path", details.YamlPath,
+	"--project", details.Project,
+	"--repository", details.Repository,
+	"--organization", details.DevOPSOrg,
+	"--repository-type", "tfsgit",
+	"--branch", details.Branch,
+	"--skip-run").Output()
+
+	if pipelineErr != nil {
+		return pipeline, pipelineErr
+	}
+
+	unmarshalErr := json.Unmarshal(pipelineOut, &pipeline)
+
+	if unmarshalErr != nil {
+		return pipeline, unmarshalErr
+	}
+
+	return pipeline, nil
 }
 
 func getQueuePipelineBaseCmd(project string, organization string, name string) *exec.Cmd {

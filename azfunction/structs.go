@@ -1,6 +1,5 @@
 package azfunction
 
-
 type (
 	// FunctionApp ~ The az cli response when retrieving azure function apps
 	FunctionApp struct {
@@ -164,5 +163,22 @@ type (
 		WindowsConfiguredStacks                interface{} `json:"windowsConfiguredStacks"`
 		WindowsFxVersion                       interface{} `json:"windowsFxVersion"`
 		XManagedServiceIdentityID              interface{} `json:"xManagedServiceIdentityId"`
+	}
+
+	// CreateFunction represents the data of the Azure Function to be created
+	CreateFunction struct {
+		Name           string
+		StorageAccount string
+		Location       string
+		ResourceGroup  string
+		Os             string
+		Runtime        string
+		Settings       []Setting
+	}
+
+	// Setting represents the environment variables of the Azure Function
+	Setting struct {
+		Value string
+		Name  string
 	}
 )

@@ -1,6 +1,11 @@
 package azdevops
 
 type (
+	// ServiceAccountGet represents the details of the service account to be retrieved
+	ServiceAccountGet struct {
+		Organization string
+		Project      string
+	}
 	// ServiceAccount ~ The az cli response when retrieving service accounts
 	ServiceAccount struct {
 		AdministratorsGroup              interface{}                        `json:"administratorsGroup"`

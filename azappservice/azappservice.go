@@ -5,15 +5,14 @@ import (
 	"errors"
 	"os/exec"
 
-	"github.com/G-MAKROGLOU/infrastructure"
 	"github.com/fatih/color"
 )
 
 var appServicePlans []AppServicePlan
 
 // CreateAzureAppServicePlan - checkS if an app service plan exists and creates it if it doesn't
-func CreateAzureAppServicePlan(wa infrastructure.AppDetails) error {
-	color.Cyan("AZ APPSERVICE | CHECKING IF APP SERVICE PLAN %s ALREADY EXISTS", wa.AppServicePlan)
+func CreateAzureAppServicePlan(aspDetails AppServicePlanCreate) error {
+	color.Cyan("AZ APPSERVICE | CHECKING IF APP SERVICE PLAN %s ALREADY EXISTS", aspDetails.Name)
 
 	color.Cyan("AZ APPSERVICE | RETRIEVING APP SERVICE PLANS")
 	rgError := getAppServicePlans()
@@ -22,24 +21,24 @@ func CreateAzureAppServicePlan(wa infrastructure.AppDetails) error {
 	}
 	color.Cyan("AZ APPSERVICE | APP SERVICE PLANS RETRIEVED SUCCESSFULLY")
 
-	exists, existsError := appServicePlanExists(wa.AppServicePlan)
+	exists, existsError := appServicePlanExists(aspDetails.Name)
 	if existsError != nil {
 		return existsError
 	}
 
 	if !exists {
-		color.Cyan("AZ APPSERVICE | APP SERVICE PLAN %s DOES NOT EXIST. CREATING IT", wa.AppServicePlan)
-		_, swCreateErr := createAppServicePlan(wa)
+		color.Cyan("AZ APPSERVICE | APP SERVICE PLAN %s DOES NOT EXIST. CREATING IT", aspDetails.Name)
+		_, swCreateErr := createAppServicePlan(aspDetails)
 
 		if swCreateErr != nil {
 			return swCreateErr
 		}
-		color.Green("AZ APPSERVICE | APP SERVICE PLAN %s CREATED SUCCESSFULLY", wa.AppServicePlan)
+		color.Green("AZ APPSERVICE | APP SERVICE PLAN %s CREATED SUCCESSFULLY", aspDetails.Name)
 		return nil
 	}
 
 	if exists {
-		color.Yellow("AZ APPSERVICE | APP SERVICE PLAN %s ALREADY EXISTS. ABORTING ANY FURTHER OPERATIONS", wa.AppServicePlan)
+		color.Yellow("AZ APPSERVICE | APP SERVICE PLAN %s ALREADY EXISTS. ABORTING ANY FURTHER OPERATIONS", aspDetails.Name)
 	}
 
 	return nil
@@ -78,10 +77,10 @@ func appServicePlanExists(aseName string) (bool, error) {
 	return exists, nil
 }
 
-func createAppServicePlan(webApp infrastructure.AppDetails) (AppServicePlan, error) {
+func createAppServicePlan(aspDetails AppServicePlanCreate) (AppServicePlan, error) {
 	var appServicePlan AppServicePlan
 
-	aseCreateOut, aseCreateErr := exec.Command("az", "appservice", "plan", "create", "--resource-group", webApp.ResourceGroup, "--name", webApp.AppServicePlan, "--sku", "F1", "--location", webApp.Location, "--per-site-scaling", "true").Output()
+	aseCreateOut, aseCreateErr := exec.Command("az", "appservice", "plan", "create", "--resource-group", aspDetails.ResourceGroup, "--name", aspDetails.Name, "--sku", "F1", "--location", aspDetails.Location, "--per-site-scaling", "true").Output()
 
 	if aseCreateErr != nil {
 		return appServicePlan, aseCreateErr

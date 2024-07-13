@@ -11,8 +11,8 @@ import (
 var storageAccounts []StorageAccount
 
 // CreateAzureStorageAccount ~ checks if a storage account exists and creates it if it doesn't
-func CreateAzureStorageAccount(saName string, location string, resourceGroup string) error {
-	color.Cyan("AZ STORAGE ACCOUNT | CHECKING IF STORAGE ACCOUNT %s ALREADY EXISTS", saName)
+func CreateAzureStorageAccount(details StorageAccountCreate) error {
+	color.Cyan("AZ STORAGE ACCOUNT | CHECKING IF STORAGE ACCOUNT %s ALREADY EXISTS", details.Name)
 
 	color.Cyan("AZ STORAGE ACCOUNT | RETRIEVING STORAGE ACCOUNTS")
 	rgError := getStorageAccounts()
@@ -21,23 +21,23 @@ func CreateAzureStorageAccount(saName string, location string, resourceGroup str
 	}
 	color.Green("AZ STORAGE ACCOUNT | STORAGE ACCOUNTS RETRIEVED SUCCESSFULLY")
 
-	exists, existsError := storageAccountExists(saName)
+	exists, existsError := storageAccountExists(details.Name)
 	if existsError != nil {
 		return existsError
 	}
 
 	if !exists {
-		color.Yellow("AZ STORAGE ACCOUNT | STORAGE ACCOUNT %s DOES NOT EXIST. CREATING IT", saName)
-		_, rgCreateErr := createStorageAccount(saName, location, resourceGroup)
+		color.Yellow("AZ STORAGE ACCOUNT | STORAGE ACCOUNT %s DOES NOT EXIST. CREATING IT", details.Name)
+		_, rgCreateErr := createStorageAccount(details)
 
 		if rgCreateErr != nil {
 			return rgCreateErr
 		}
-		color.Green("AZ STORAGE ACCOUNT | STORAGE ACCOUNT %s CREATED SUCCESSFULLY", saName)
+		color.Green("AZ STORAGE ACCOUNT | STORAGE ACCOUNT %s CREATED SUCCESSFULLY", details.Name)
 	}
 
 	if exists {
-		color.Yellow("AZ STORAGE ACCOUNT | STORAGE ACCOUNT %s ALREADY EXISTS. SKIPPING STORAGE ACCOUNT CREATION", saName)
+		color.Yellow("AZ STORAGE ACCOUNT | STORAGE ACCOUNT %s ALREADY EXISTS. SKIPPING STORAGE ACCOUNT CREATION", details.Name)
 	}
 
 	return nil
@@ -76,9 +76,9 @@ func storageAccountExists(saName string) (bool, error) {
 	return exists, nil
 }
 
-func createStorageAccount(saName string, location string, resourceGroup string) (StorageAccount, error) {
+func createStorageAccount(details StorageAccountCreate) (StorageAccount, error) {
 	var storageAccount StorageAccount
-	saCreateOut, saErr := exec.Command("az", "storage", "account", "create", "--name", saName, "--location", location, "--resource-group", resourceGroup, "--sku", "Standard_LRS", "--allow-blob-public-access", "false").Output()
+	saCreateOut, saErr := exec.Command("az", "storage", "account", "create", "--name", details.Name, "--location", details.Location, "--resource-group", details.ResourceGroup, "--sku", "Standard_LRS", "--allow-blob-public-access", "false").Output()
 	if saErr != nil {
 		return storageAccount, saErr
 	}

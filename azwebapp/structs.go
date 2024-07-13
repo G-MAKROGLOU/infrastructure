@@ -1,6 +1,13 @@
 package azwebapp
 
 type (
+	// WebAppCreate represents the details of the Azure Web App to be created
+	WebAppCreate struct {
+		Name           string
+		ResourceGroup  string
+		AppServicePlan string
+		Runtime        string
+	}
 	// WebApp ~ the az cli response when retrieving azure web apps
 	WebApp struct {
 		AppServicePlanID            string                   `json:"appServicePlanId"`
@@ -164,5 +171,4 @@ type (
 		WindowsFxVersion                       interface{} `json:"windowsFxVersion"`
 		XManagedServiceIdentityID              interface{} `json:"xManagedServiceIdentityId"`
 	}
-
 )

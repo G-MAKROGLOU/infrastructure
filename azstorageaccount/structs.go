@@ -3,6 +3,12 @@ package azstorageaccount
 import "time"
 
 type (
+	// StorageAccountCreate represents the details of the storage account to be created
+	StorageAccountCreate struct {
+		Name string 
+		Location string 
+		ResourceGroup string
+	}
 	// StorageAccount ~ the az cli response when retrieving storage accounts
 	StorageAccount struct {
 		AccessTier                            interface{}                    `json:"accessTier"`

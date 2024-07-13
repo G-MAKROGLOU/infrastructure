@@ -1,7 +1,11 @@
 package azresourcegroup
 
-
 type (
+	// ResourceGroupCreate represents the details of the resource group to be created
+	ResourceGroupCreate struct {
+		Name     string
+		Location string
+	}
 	// ResourceGroup ~ the az cli response when retrieving resource groups
 	ResourceGroup struct {
 		ID         string                  `json:"id"`

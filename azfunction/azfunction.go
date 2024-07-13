@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/G-MAKROGLOU/infrastructure"
 	"github.com/fatih/color"
 )
 
@@ -16,8 +15,8 @@ var (
 )
 
 // CreateAzureFunction - checks if an azure function app exists and creates it if it doesn't
-func CreateAzureFunction(funcApp infrastructure.AppDetails) error {
-	color.Cyan("AZ FUNCTIONAPP | CHECKING IF FUNCTIONAPP %s ALREADY EXISTS", funcApp.Name)
+func CreateAzureFunction(funcDetails CreateFunction) error {
+	color.Cyan("AZ FUNCTIONAPP | CHECKING IF FUNCTIONAPP %s ALREADY EXISTS", funcDetails.Name)
 
 	color.Cyan("AZ FUNCTIONAPP | RETRIEVING FUNCTIONAPPS")
 	faError := getFunctionApps()
@@ -26,35 +25,35 @@ func CreateAzureFunction(funcApp infrastructure.AppDetails) error {
 	}
 	color.Green("AZ FUNCTIONAPP | FUNCTIONAPPS RETRIEVED SUCCESSFULLY")
 
-	exists, existsError := functionAppExists(funcApp.Name)
+	exists, existsError := functionAppExists(funcDetails.Name)
 	if existsError != nil {
 		return existsError
 	}
 
 	if !exists {
-		color.Yellow("AZ FUNCTIONAPP | FUNCTIONAPP %s DOES NOT EXIST. CREATING IT", funcApp.Name)
-		_, faCreateErr := createFunctionApp(funcApp)
+		color.Yellow("AZ FUNCTIONAPP | FUNCTIONAPP %s DOES NOT EXIST. CREATING IT", funcDetails.Name)
+		_, faCreateErr := createFunctionApp(funcDetails)
 
 		if faCreateErr != nil {
 			return faCreateErr
 		}
-		color.Green("AZ FUNCTIONAPP | FUNCTIONAPP %s CREATED SUCCESSFULLY", funcApp.Name)
+		color.Green("AZ FUNCTIONAPP | FUNCTIONAPP %s CREATED SUCCESSFULLY", funcDetails.Name)
 	}
 
 	if exists {
-		color.Yellow("AZ FUNCTIONAPP | FUNCTIONAPP %s ALREADY EXISTS. SKIPPING FUNCTION APP CREATION", funcApp.Name)
+		color.Yellow("AZ FUNCTIONAPP | FUNCTIONAPP %s ALREADY EXISTS. SKIPPING FUNCTION APP CREATION", funcDetails.Name)
 	}
 
 	return nil
 }
 
 // SetAzureFunctionEnv - sets the environment variables for an azure function app
-func SetAzureFunctionEnv(faName string, rgName string, faSettings []infrastructure.AppSettings) error {
-	color.Cyan("AZ FUNCTIONAPP SETTINGS | UPDATING SETTINGS FOR FUNCTIONAPP %s", faName)
+func SetAzureFunctionEnv(funcDetails CreateFunction) error {
+	color.Cyan("AZ FUNCTIONAPP SETTINGS | UPDATING SETTINGS FOR FUNCTIONAPP %s", funcDetails.Name)
 
-	cmd := exec.Command("az", "functionapp", "config", "appsettings", "set", "--name", faName, "--resource-group", rgName, "--settings")
+	cmd := exec.Command("az", "functionapp", "config", "appsettings", "set", "--name", funcDetails.Name, "--resource-group", funcDetails.ResourceGroup, "--settings")
 
-	for _, setting := range faSettings {
+	for _, setting := range funcDetails.Settings {
 		arg := fmt.Sprintf("%s=\"%s\"", setting.Name, setting.Value)
 		cmd.Args = append(cmd.Args, arg)
 	}
@@ -64,7 +63,7 @@ func SetAzureFunctionEnv(faName string, rgName string, faSettings []infrastructu
 	if settingsErr != nil {
 		return settingsErr
 	}
-	color.Green("AZ FUNCTIONAPP SETTINGS | SETTINGS FOR FUNCTIONAPP %s UPDATED SUCCESSFULLY", faName)
+	color.Green("AZ FUNCTIONAPP SETTINGS | SETTINGS FOR FUNCTIONAPP %s UPDATED SUCCESSFULLY", funcDetails.Name)
 
 	return nil
 }
@@ -103,10 +102,10 @@ func functionAppExists(faName string) (bool, error) {
 	return exists, nil
 }
 
-func createFunctionApp(funcApp infrastructure.AppDetails) (FunctionApp, error) {
+func createFunctionApp(funcDetails CreateFunction) (FunctionApp, error) {
 	var functionApp FunctionApp
 
-	funcOut, funcErr := exec.Command("az", "functionapp", "create", "--resource-group", funcApp.ResourceGroup, "--consumption-plan-location", funcApp.Location, "--runtime", funcApp.Runtime, "--os-type", funcApp.Os, "--functions-version", "4", "--name", funcApp.Name, "--storage-account", funcApp.StorageAccount).Output()
+	funcOut, funcErr := exec.Command("az", "functionapp", "create", "--resource-group", funcDetails.ResourceGroup, "--consumption-plan-location", funcDetails.Location, "--runtime", funcDetails.ResourceGroup, "--os-type", funcDetails.Os, "--functions-version", "4", "--name", funcDetails.Name, "--storage-account", funcDetails.StorageAccount).Output()
 
 	if funcErr != nil {
 		return functionApp, funcErr

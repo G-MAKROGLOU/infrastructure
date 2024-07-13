@@ -4,6 +4,15 @@ import "time"
 
 
 type (
+	// PipelineCreate represents the details of the pipeline to be created
+	PipelineCreate struct {
+		Name string
+		DevOPSOrg string
+		Project string
+		YamlPath string
+		Repository string
+		Branch string
+	}
 	// AgentPool JSON representation of AgentPool
 	AgentPool struct {
 		AgentCloudID  interface{}        `json:"agentCloudId"`
@@ -24,8 +33,6 @@ type (
 		Size          int                `json:"size"`
 		TargetSize    interface{}        `json:"targetSize"`
 	}
-
-
 	agentPoolCreatedBy struct {
 		Descriptor        string      `json:"descriptor"`
 		DirectoryAlias    interface{} `json:"directoryAlias"`
