@@ -18,6 +18,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # Warm the module cache before golangci-lint runs.  Without this,
+      # linters that load export data (staticcheck, etc.) can fail with
+      # "no export data for <pkg>" when indirect deps haven't been compiled.
+      - name: Download modules
+        run: go mod download
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
