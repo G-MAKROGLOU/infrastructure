@@ -1,98 +1,86 @@
 package azwebapp
 
 import (
+	"bytes"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/fatih/color"
 )
 
-var (
-	webApps []WebApp
-)
-
-// CreateAzureWebApp - checks if an azure web app already exists and creates it if it doesn't
+// CreateAzureWebApp checks if an azure web app already exists and creates it if it doesn't.
 func CreateAzureWebApp(details WebAppCreate) error {
 	color.Cyan("AZ WEBAPP | CHECKING IF WEBAPP %s ALREADY EXISTS", details.Name)
 
 	color.Cyan("AZ WEBAPP | RETRIEVING WEBAPPS")
-	rgError := getWebApps()
-	if rgError != nil {
-		return rgError
+	webApps, err := getWebApps()
+	if err != nil {
+		return err
 	}
 	color.Cyan("AZ WEBAPP | WEBAPPS RETRIEVED SUCCESSFULLY")
 
-	exists, existsError := webAppExists(details.Name)
-	if existsError != nil {
-		return existsError
-	}
-
-	if !exists {
+	if !webAppExists(webApps, details.Name) {
 		color.Cyan("AZ WEBAPP | WEBAPP %s DOES NOT EXIST. CREATING IT", details.Name)
-		_, waCreateErr := createWebApp(details)
-
-		if waCreateErr != nil {
-			return waCreateErr
+		if _, err := createWebApp(details); err != nil {
+			return err
 		}
 		color.Green("AZ WEBAPP | WEBAPP %s CREATED SUCCESSFULLY", details.Name)
-		return nil
-	}
-
-	if exists {
+	} else {
 		color.Yellow("AZ WEBAPP | WEBAPP %s ALREADY EXISTS. SKIPPING WEBAPP CREATION", details.Name)
 	}
 
 	return nil
 }
 
-func getWebApps() error {
-	waListOut, waErr := exec.Command("az", "webapp", "list").Output()
+// getWebApps fetches all web apps and returns a fresh slice.
+// It is safe to call concurrently — no shared state is written.
+func getWebApps() ([]WebApp, error) {
+	var stderrBuf bytes.Buffer
+	cmd := exec.Command("az", "webapp", "list")
+	cmd.Stderr = &stderrBuf
 
-	if waErr != nil {
-		return waErr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("az webapp list: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 
-	unMarshalErr := json.Unmarshal(waListOut, &webApps)
-
-	if unMarshalErr != nil {
-		return unMarshalErr
+	var webApps []WebApp
+	if err := json.Unmarshal(out, &webApps); err != nil {
+		return nil, fmt.Errorf("az webapp list: failed to parse response: %w", err)
 	}
-
-	return nil
+	return webApps, nil
 }
 
-func webAppExists(waName string) (bool, error) {
-	exists := false
-
-	if webApps == nil {
-		return exists, errors.New("Web Apps not initialized yet")
-	}
-
-	for _, sw := range webApps {
-		if sw.Name == waName {
-			exists = true
-			break
+func webAppExists(webApps []WebApp, name string) bool {
+	for _, wa := range webApps {
+		if wa.Name == name {
+			return true
 		}
 	}
-
-	return exists, nil
+	return false
 }
 
 func createWebApp(details WebAppCreate) (WebApp, error) {
-	// --plan ASP-WebApps-af28 --name test-octant --runtime NODE:16LTS
 	var webApp WebApp
+	var stderrBuf bytes.Buffer
 
-	waCreateOut, waCreateErr := exec.Command("az", "webapp", "create", "--resource-group", details.ResourceGroup, "--plan", details.AppServicePlan, "--name", details.Name, "--runtime", details.Runtime).Output()
-	if waCreateErr != nil {
-		return webApp, waCreateErr
+	cmd := exec.Command("az", "webapp", "create",
+		"--resource-group", details.ResourceGroup,
+		"--plan", details.AppServicePlan,
+		"--name", details.Name,
+		"--runtime", details.Runtime,
+	)
+	cmd.Stderr = &stderrBuf
+
+	out, err := cmd.Output()
+	if err != nil {
+		return webApp, fmt.Errorf("az webapp create: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 
-	unMarshalErr := json.Unmarshal(waCreateOut, &webApp)
-
-	if unMarshalErr != nil {
-		return webApp, unMarshalErr
+	if err := json.Unmarshal(out, &webApp); err != nil {
+		return webApp, fmt.Errorf("az webapp create: failed to parse response: %w", err)
 	}
-
 	return webApp, nil
 }

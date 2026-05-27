@@ -1,55 +1,42 @@
 package azpipelines
 
 import (
+	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os/exec"
+	"strconv"
+	"strings"
 
 	"github.com/fatih/color"
 )
 
-var (
-	agentPools []AgentPool
-	pipelines  []Pipeline
-)
-
-// CreatePipelineFromYaml - creates a pipeline from an existing YAML file
+// CreatePipelineFromYaml creates a pipeline from an existing YAML file in the repository.
+// It is a no-op if the pipeline already exists.
 func CreatePipelineFromYaml(details PipelineCreate) error {
 	color.Cyan("AZ PIPELINES | CHECKING IF PIPELINE %s ALREADY EXISTS", details.Name)
 
 	color.Cyan("AZ PIPELINES | RETRIEVING PIPELINES")
-	rgError := getPipelines(details.DevOPSOrg, details.Project)
-	if rgError != nil {
-		return rgError
+	pipelines, err := getPipelines(details.DevOPSOrg, details.Project)
+	if err != nil {
+		return err
 	}
 	color.Green("AZ PIPELINES | PIPELINES RETRIEVED SUCCESSFULLY")
 
-	exists, existsError := pipelineExists(details.Name)
-	if existsError != nil {
-		return existsError
-	}
-
-	if !exists {
+	if !pipelineExists(pipelines, details.Name) {
 		color.Yellow("AZ PIPELINES | PIPELINE %s DOES NOT EXIST. CREATING IT", details.Name)
-
-		_, pipelineErr := createPipeline(details)
-
-		if pipelineErr != nil {
-			return pipelineErr
+		if _, err := createPipeline(details); err != nil {
+			return err
 		}
-
 		color.Green("AZ PIPELINES | PIPELINE %s CREATED SUCCESSFULLY", details.Name)
-	}
-
-	if exists {
+	} else {
 		color.Yellow("AZ PIPELINES | PIPELINE %s ALREADY EXISTS. SKIPPING PIPELINE CREATION", details.Name)
 	}
 
 	return nil
 }
 
-// QueuePipeline - queues a deployment pipeline
+// QueuePipeline queues a deployment pipeline with the provided parameters.
 func QueuePipeline(pipelineInfo PipelineCreate, parameters []string) (PipelineQueueRes, error) {
 	var pipelineQueueRes PipelineQueueRes
 	color.Cyan("AZ PIPELINES | QUEUEING PIPELINE %s", pipelineInfo.Name)
@@ -63,109 +50,100 @@ func QueuePipeline(pipelineInfo PipelineCreate, parameters []string) (PipelineQu
 		}
 	}
 
-	fmt.Println(cmd.String())
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
 
-	queueOut, pipelineErr := cmd.Output()
-
-	if pipelineErr != nil {
-		return pipelineQueueRes, pipelineErr
+	out, err := cmd.Output()
+	if err != nil {
+		return pipelineQueueRes, fmt.Errorf("az pipelines run: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 
-	unmarshalErr := json.Unmarshal(queueOut, &pipelineQueueRes)
-	if unmarshalErr != nil {
-		return pipelineQueueRes, unmarshalErr
+	if err := json.Unmarshal(out, &pipelineQueueRes); err != nil {
+		return pipelineQueueRes, fmt.Errorf("az pipelines run: failed to parse response: %w", err)
 	}
 
 	color.Green("AZ PIPELINES | PIPELINE %s QUEUED SUCCESSFULLY", pipelineInfo.Name)
 	return pipelineQueueRes, nil
 }
 
-// GetPipelineStatus - WIP retrieves the status of a pipeline
+// GetPipelineStatus retrieves the current status and result of a single pipeline run.
+// Bug fix: previously fetched ALL builds and filtered; now uses 'az pipelines build show --id'.
+// Bug fix: previously returned nil error on az CLI failure, causing infinite polling.
 func GetPipelineStatus(organization string, project string, pipelineID int) (PipelineStatus, error) {
-	var pipelineStatuses []PipelineStatus
 	var pipelineStatus PipelineStatus
-	//query := fmt.Sprintf("'[? id == `%d`].{id:id, status:status, result:result}[0]'", pipelineID)
+	var stderrBuf bytes.Buffer
 
-	// using the jmespath --query does not print the desired output. retrieve all and filter
-	out, err := exec.Command("az", "pipelines", "build", "list", "--organization", organization, "--project", project).Output()
+	cmd := exec.Command("az", "pipelines", "build", "show",
+		"--id", strconv.Itoa(pipelineID),
+		"--organization", organization,
+		"--project", project,
+	)
+	cmd.Stderr = &stderrBuf
 
+	out, err := cmd.Output()
 	if err != nil {
-		return pipelineStatus, nil
+		return pipelineStatus, fmt.Errorf("az pipelines build show: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 
-	err = json.Unmarshal(out, &pipelineStatuses)
-	if err != nil {
-		return pipelineStatus, err
-	}
-
-	if len(pipelineStatuses) == 0 {
-		return pipelineStatus, errors.New("Failed to retrieve pipeline status")
-	}
-
-	for _, pipeline := range pipelineStatuses {
-		if pipeline.ID == pipelineID {
-			pipelineStatus = pipeline
-			break
-		}
+	if err := json.Unmarshal(out, &pipelineStatus); err != nil {
+		return pipelineStatus, fmt.Errorf("az pipelines build show: failed to parse response: %w", err)
 	}
 
 	return pipelineStatus, nil
 }
 
-func getPipelines(devopsOrg string, project string) error {
-	out, pipelineErr := exec.Command("az", "pipelines", "list", "--organization", devopsOrg, "--project", project).Output()
+// getPipelines fetches all pipelines for the given org/project and returns a fresh slice.
+// It is safe to call concurrently — no shared state is written.
+func getPipelines(devopsOrg string, project string) ([]Pipeline, error) {
+	var stderrBuf bytes.Buffer
+	cmd := exec.Command("az", "pipelines", "list", "--organization", devopsOrg, "--project", project)
+	cmd.Stderr = &stderrBuf
 
-	if pipelineErr != nil {
-		return pipelineErr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("az pipelines list: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 
-	unmarshalErr := json.Unmarshal(out, &pipelines)
-	if unmarshalErr != nil {
-		return unmarshalErr
+	var pipelines []Pipeline
+	if err := json.Unmarshal(out, &pipelines); err != nil {
+		return nil, fmt.Errorf("az pipelines list: failed to parse response: %w", err)
 	}
-	return nil
+	return pipelines, nil
 }
 
-func pipelineExists(pipelineName string) (bool, error) {
-
-	exists := false
-
-	if pipelines == nil {
-		return exists, errors.New("Pipelines not initialized yet")
-	}
-
-	for _, pipeline := range pipelines {
-		if pipeline.Name == pipelineName {
-			exists = true
-			break
+func pipelineExists(pipelines []Pipeline, name string) bool {
+	for _, p := range pipelines {
+		if p.Name == name {
+			return true
 		}
 	}
-	return exists, nil
+	return false
 }
 
 func createPipeline(details PipelineCreate) (Pipeline, error) {
 	var pipeline Pipeline
+	var stderrBuf bytes.Buffer
 
-	pipelineOut, pipelineErr := exec.Command("az", "pipelines", "create",
-	"--name", details.Name,
-	"--yaml-path", details.YamlPath,
-	"--project", details.Project,
-	"--repository", details.Repository,
-	"--organization", details.DevOPSOrg,
-	"--repository-type", "tfsgit",
-	"--branch", details.Branch,
-	"--skip-run").Output()
+	cmd := exec.Command("az", "pipelines", "create",
+		"--name", details.Name,
+		"--yaml-path", details.YamlPath,
+		"--project", details.Project,
+		"--repository", details.Repository,
+		"--organization", details.DevOPSOrg,
+		"--repository-type", "tfsgit",
+		"--branch", details.Branch,
+		"--skip-run",
+	)
+	cmd.Stderr = &stderrBuf
 
-	if pipelineErr != nil {
-		return pipeline, pipelineErr
+	out, err := cmd.Output()
+	if err != nil {
+		return pipeline, fmt.Errorf("az pipelines create: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 
-	unmarshalErr := json.Unmarshal(pipelineOut, &pipeline)
-
-	if unmarshalErr != nil {
-		return pipeline, unmarshalErr
+	if err := json.Unmarshal(out, &pipeline); err != nil {
+		return pipeline, fmt.Errorf("az pipelines create: failed to parse response: %w", err)
 	}
-
 	return pipeline, nil
 }
 
@@ -174,5 +152,6 @@ func getQueuePipelineBaseCmd(project string, organization string, name string) *
 		"--project", project,
 		"--organization", organization,
 		"--name", name,
-		"--verbose")
+		"--verbose",
+	)
 }

@@ -1,96 +1,87 @@
 package azappservice
 
 import (
+	"bytes"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/fatih/color"
 )
 
-var appServicePlans []AppServicePlan
-
-// CreateAzureAppServicePlan - checkS if an app service plan exists and creates it if it doesn't
+// CreateAzureAppServicePlan checks if an app service plan exists and creates it if it doesn't.
 func CreateAzureAppServicePlan(aspDetails AppServicePlanCreate) error {
 	color.Cyan("AZ APPSERVICE | CHECKING IF APP SERVICE PLAN %s ALREADY EXISTS", aspDetails.Name)
 
 	color.Cyan("AZ APPSERVICE | RETRIEVING APP SERVICE PLANS")
-	rgError := getAppServicePlans()
-	if rgError != nil {
-		return rgError
+	appServicePlans, err := getAppServicePlans()
+	if err != nil {
+		return err
 	}
 	color.Cyan("AZ APPSERVICE | APP SERVICE PLANS RETRIEVED SUCCESSFULLY")
 
-	exists, existsError := appServicePlanExists(aspDetails.Name)
-	if existsError != nil {
-		return existsError
-	}
-
-	if !exists {
+	if !appServicePlanExists(appServicePlans, aspDetails.Name) {
 		color.Cyan("AZ APPSERVICE | APP SERVICE PLAN %s DOES NOT EXIST. CREATING IT", aspDetails.Name)
-		_, swCreateErr := createAppServicePlan(aspDetails)
-
-		if swCreateErr != nil {
-			return swCreateErr
+		if _, err := createAppServicePlan(aspDetails); err != nil {
+			return err
 		}
 		color.Green("AZ APPSERVICE | APP SERVICE PLAN %s CREATED SUCCESSFULLY", aspDetails.Name)
-		return nil
-	}
-
-	if exists {
-		color.Yellow("AZ APPSERVICE | APP SERVICE PLAN %s ALREADY EXISTS. ABORTING ANY FURTHER OPERATIONS", aspDetails.Name)
+	} else {
+		color.Yellow("AZ APPSERVICE | APP SERVICE PLAN %s ALREADY EXISTS. SKIPPING APP SERVICE PLAN CREATION", aspDetails.Name)
 	}
 
 	return nil
 }
 
-func getAppServicePlans() error {
-	aseListOut, aseErr := exec.Command("az", "appservice", "plan", "list").Output()
+// getAppServicePlans fetches all app service plans and returns a fresh slice.
+// It is safe to call concurrently — no shared state is written.
+func getAppServicePlans() ([]AppServicePlan, error) {
+	var stderrBuf bytes.Buffer
+	cmd := exec.Command("az", "appservice", "plan", "list")
+	cmd.Stderr = &stderrBuf
 
-	if aseErr != nil {
-		return aseErr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("az appservice plan list: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 
-	unMarshalErr := json.Unmarshal(aseListOut, &appServicePlans)
-
-	if unMarshalErr != nil {
-		return unMarshalErr
+	var appServicePlans []AppServicePlan
+	if err := json.Unmarshal(out, &appServicePlans); err != nil {
+		return nil, fmt.Errorf("az appservice plan list: failed to parse response: %w", err)
 	}
-
-	return nil
+	return appServicePlans, nil
 }
 
-func appServicePlanExists(aseName string) (bool, error) {
-	exists := false
-
-	if appServicePlans == nil {
-		return exists, errors.New("App Service Plans not initialized yet")
-	}
-
-	for _, sw := range appServicePlans {
-		if sw.Name == aseName {
-			exists = true
-			break
+func appServicePlanExists(appServicePlans []AppServicePlan, name string) bool {
+	for _, asp := range appServicePlans {
+		if asp.Name == name {
+			return true
 		}
 	}
-
-	return exists, nil
+	return false
 }
 
 func createAppServicePlan(aspDetails AppServicePlanCreate) (AppServicePlan, error) {
 	var appServicePlan AppServicePlan
+	var stderrBuf bytes.Buffer
 
-	aseCreateOut, aseCreateErr := exec.Command("az", "appservice", "plan", "create", "--resource-group", aspDetails.ResourceGroup, "--name", aspDetails.Name, "--sku", "F1", "--location", aspDetails.Location, "--per-site-scaling", "true").Output()
+	cmd := exec.Command("az", "appservice", "plan", "create",
+		"--resource-group", aspDetails.ResourceGroup,
+		"--name", aspDetails.Name,
+		"--sku", "F1",
+		"--location", aspDetails.Location,
+		"--per-site-scaling", "true",
+	)
+	cmd.Stderr = &stderrBuf
 
-	if aseCreateErr != nil {
-		return appServicePlan, aseCreateErr
+	out, err := cmd.Output()
+	if err != nil {
+		return appServicePlan, fmt.Errorf("az appservice plan create: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 
-	unMarshalErr := json.Unmarshal(aseCreateOut, &appServicePlan)
-
-	if unMarshalErr != nil {
-		return appServicePlan, unMarshalErr
+	if err := json.Unmarshal(out, &appServicePlan); err != nil {
+		return appServicePlan, fmt.Errorf("az appservice plan create: failed to parse response: %w", err)
 	}
-
 	return appServicePlan, nil
 }

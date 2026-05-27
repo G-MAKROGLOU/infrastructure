@@ -1,97 +1,81 @@
 package azresourcegroup
 
 import (
+	"bytes"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/fatih/color"
 )
 
-var (
-	resourceGroups []ResourceGroup
-)
-
-// CreateAzureResourceGroup - check is a resource group exists and creates it if it doesn't
+// CreateAzureResourceGroup - checks if a resource group exists and creates it if it doesn't.
 func CreateAzureResourceGroup(details ResourceGroupCreate) error {
 	color.Cyan("AZ RESOURCE GROUP | CHECKING IF RESOURCE GROUP %s ALREADY EXISTS", details.Name)
 
 	color.Cyan("AZ RESOURCE GROUP | RETRIEVING RESOURCE GROUPS")
-	rgError := getResourceGroups()
+	resourceGroups, rgError := getResourceGroups()
 	if rgError != nil {
 		return rgError
 	}
 	color.Green("AZ RESOURCE GROUP | RESOURCE GROUPS RETRIEVED SUCCESSFULLY")
 
-	exists, existsError := resourceGroupExists(details.Name)
-	if existsError != nil {
-		return existsError
-	}
-
-	if !exists {
+	if !resourceGroupExists(resourceGroups, details.Name) {
 		color.Yellow("AZ RESOURCE GROUP | RESOURCE GROUP %s DID NOT EXIST. CREATING IT", details.Name)
-		_, rgCreateErr := createResourceGroup(details)
-
-		if rgCreateErr != nil {
-			return rgCreateErr
+		if _, err := createResourceGroup(details); err != nil {
+			return err
 		}
 		color.Green("AZ RESOURCE GROUP | RESOURCE GROUP %s CREATED SUCCESSFULLY", details.Name)
-	}
-
-	if exists {
+	} else {
 		color.Yellow("AZ RESOURCE GROUP | RESOURCE GROUP %s ALREADY EXISTS. SKIPPING RESOURCE GROUP CREATION", details.Name)
 	}
 
 	return nil
 }
 
-func getResourceGroups() error {
+// getResourceGroups fetches all resource groups from Azure and returns a fresh slice.
+// It is safe to call concurrently — no shared state is written.
+func getResourceGroups() ([]ResourceGroup, error) {
+	var stderrBuf bytes.Buffer
+	cmd := exec.Command("az", "group", "list")
+	cmd.Stderr = &stderrBuf
 
-	resGroupListOut, resGroupErr := exec.Command("az", "group", "list").Output()
-
-	if resGroupErr != nil {
-		return resGroupErr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("az group list: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 
-	unMarshalErr := json.Unmarshal(resGroupListOut, &resourceGroups)
-
-	if unMarshalErr != nil {
-		return unMarshalErr
+	var resourceGroups []ResourceGroup
+	if err := json.Unmarshal(out, &resourceGroups); err != nil {
+		return nil, fmt.Errorf("az group list: failed to parse response: %w", err)
 	}
-
-	return nil
+	return resourceGroups, nil
 }
 
-func resourceGroupExists(rgName string) (bool, error) {
-	exists := false
-
-	if resourceGroups == nil {
-		return exists, errors.New("Resource Groups not initialized yet")
-	}
-
+func resourceGroupExists(resourceGroups []ResourceGroup, name string) bool {
 	for _, rg := range resourceGroups {
-		if rg.Name == rgName {
-			exists = true
-			break
+		if rg.Name == name {
+			return true
 		}
 	}
-
-	return exists, nil
+	return false
 }
 
 func createResourceGroup(details ResourceGroupCreate) (ResourceGroup, error) {
 	var resourceGroup ResourceGroup
-	rgCreateOut, rgCreateErr := exec.Command("az", "group", "create", "--name", details.Name, "--location", details.Location).Output()
+	var stderrBuf bytes.Buffer
 
-	if rgCreateErr != nil {
-		return resourceGroup, rgCreateErr
+	cmd := exec.Command("az", "group", "create", "--name", details.Name, "--location", details.Location)
+	cmd.Stderr = &stderrBuf
+
+	out, err := cmd.Output()
+	if err != nil {
+		return resourceGroup, fmt.Errorf("az group create: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 
-	unmarshalErr := json.Unmarshal(rgCreateOut, &resourceGroup)
-
-	if unmarshalErr != nil {
-		return resourceGroup, unmarshalErr
+	if err := json.Unmarshal(out, &resourceGroup); err != nil {
+		return resourceGroup, fmt.Errorf("az group create: failed to parse response: %w", err)
 	}
-
 	return resourceGroup, nil
 }

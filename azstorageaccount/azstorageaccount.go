@@ -1,93 +1,87 @@
 package azstorageaccount
 
 import (
+	"bytes"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/fatih/color"
 )
 
-var storageAccounts []StorageAccount
-
-// CreateAzureStorageAccount ~ checks if a storage account exists and creates it if it doesn't
+// CreateAzureStorageAccount checks if a storage account exists and creates it if it doesn't.
 func CreateAzureStorageAccount(details StorageAccountCreate) error {
 	color.Cyan("AZ STORAGE ACCOUNT | CHECKING IF STORAGE ACCOUNT %s ALREADY EXISTS", details.Name)
 
 	color.Cyan("AZ STORAGE ACCOUNT | RETRIEVING STORAGE ACCOUNTS")
-	rgError := getStorageAccounts()
-	if rgError != nil {
-		return rgError
+	storageAccounts, err := getStorageAccounts()
+	if err != nil {
+		return err
 	}
 	color.Green("AZ STORAGE ACCOUNT | STORAGE ACCOUNTS RETRIEVED SUCCESSFULLY")
 
-	exists, existsError := storageAccountExists(details.Name)
-	if existsError != nil {
-		return existsError
-	}
-
-	if !exists {
+	if !storageAccountExists(storageAccounts, details.Name) {
 		color.Yellow("AZ STORAGE ACCOUNT | STORAGE ACCOUNT %s DOES NOT EXIST. CREATING IT", details.Name)
-		_, rgCreateErr := createStorageAccount(details)
-
-		if rgCreateErr != nil {
-			return rgCreateErr
+		if _, err := createStorageAccount(details); err != nil {
+			return err
 		}
 		color.Green("AZ STORAGE ACCOUNT | STORAGE ACCOUNT %s CREATED SUCCESSFULLY", details.Name)
-	}
-
-	if exists {
+	} else {
 		color.Yellow("AZ STORAGE ACCOUNT | STORAGE ACCOUNT %s ALREADY EXISTS. SKIPPING STORAGE ACCOUNT CREATION", details.Name)
 	}
 
 	return nil
 }
 
-func getStorageAccounts() error {
-	saListOut, resGroupErr := exec.Command("az", "storage", "account", "list").Output()
+// getStorageAccounts fetches all storage accounts and returns a fresh slice.
+// It is safe to call concurrently — no shared state is written.
+func getStorageAccounts() ([]StorageAccount, error) {
+	var stderrBuf bytes.Buffer
+	cmd := exec.Command("az", "storage", "account", "list")
+	cmd.Stderr = &stderrBuf
 
-	if resGroupErr != nil {
-		return resGroupErr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("az storage account list: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 
-	unMarshalErr := json.Unmarshal(saListOut, &storageAccounts)
-
-	if unMarshalErr != nil {
-		return unMarshalErr
+	var storageAccounts []StorageAccount
+	if err := json.Unmarshal(out, &storageAccounts); err != nil {
+		return nil, fmt.Errorf("az storage account list: failed to parse response: %w", err)
 	}
-
-	return nil
+	return storageAccounts, nil
 }
 
-func storageAccountExists(saName string) (bool, error) {
-	exists := false
-
-	if storageAccounts == nil {
-		return exists, errors.New("Storage Accounts not initialized yet")
-	}
-
+func storageAccountExists(storageAccounts []StorageAccount, name string) bool {
 	for _, sa := range storageAccounts {
-		if sa.Name == saName {
-			exists = true
-			break
+		if sa.Name == name {
+			return true
 		}
 	}
-
-	return exists, nil
+	return false
 }
 
 func createStorageAccount(details StorageAccountCreate) (StorageAccount, error) {
 	var storageAccount StorageAccount
-	saCreateOut, saErr := exec.Command("az", "storage", "account", "create", "--name", details.Name, "--location", details.Location, "--resource-group", details.ResourceGroup, "--sku", "Standard_LRS", "--allow-blob-public-access", "false").Output()
-	if saErr != nil {
-		return storageAccount, saErr
+	var stderrBuf bytes.Buffer
+
+	cmd := exec.Command("az", "storage", "account", "create",
+		"--name", details.Name,
+		"--location", details.Location,
+		"--resource-group", details.ResourceGroup,
+		"--sku", "Standard_LRS",
+		"--allow-blob-public-access", "false",
+	)
+	cmd.Stderr = &stderrBuf
+
+	out, err := cmd.Output()
+	if err != nil {
+		return storageAccount, fmt.Errorf("az storage account create: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 
-	unmarshalErr := json.Unmarshal(saCreateOut, &storageAccount)
-
-	if unmarshalErr != nil {
-		return storageAccount, unmarshalErr
+	if err := json.Unmarshal(out, &storageAccount); err != nil {
+		return storageAccount, fmt.Errorf("az storage account create: failed to parse response: %w", err)
 	}
-
 	return storageAccount, nil
 }

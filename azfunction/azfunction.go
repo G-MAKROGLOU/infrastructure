@@ -1,121 +1,116 @@
 package azfunction
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os/exec"
-
-	"encoding/json"
-	"errors"
+	"strings"
 
 	"github.com/fatih/color"
 )
 
-var (
-	functionApps []FunctionApp
-)
-
-// CreateAzureFunction - checks if an azure function app exists and creates it if it doesn't
+// CreateAzureFunction checks if an azure function app exists and creates it if it doesn't.
 func CreateAzureFunction(funcDetails CreateFunction) error {
 	color.Cyan("AZ FUNCTIONAPP | CHECKING IF FUNCTIONAPP %s ALREADY EXISTS", funcDetails.Name)
 
 	color.Cyan("AZ FUNCTIONAPP | RETRIEVING FUNCTIONAPPS")
-	faError := getFunctionApps()
-	if faError != nil {
-		return faError
+	functionApps, err := getFunctionApps()
+	if err != nil {
+		return err
 	}
 	color.Green("AZ FUNCTIONAPP | FUNCTIONAPPS RETRIEVED SUCCESSFULLY")
 
-	exists, existsError := functionAppExists(funcDetails.Name)
-	if existsError != nil {
-		return existsError
-	}
-
-	if !exists {
+	if !functionAppExists(functionApps, funcDetails.Name) {
 		color.Yellow("AZ FUNCTIONAPP | FUNCTIONAPP %s DOES NOT EXIST. CREATING IT", funcDetails.Name)
-		_, faCreateErr := createFunctionApp(funcDetails)
-
-		if faCreateErr != nil {
-			return faCreateErr
+		if _, err := createFunctionApp(funcDetails); err != nil {
+			return err
 		}
 		color.Green("AZ FUNCTIONAPP | FUNCTIONAPP %s CREATED SUCCESSFULLY", funcDetails.Name)
-	}
-
-	if exists {
+	} else {
 		color.Yellow("AZ FUNCTIONAPP | FUNCTIONAPP %s ALREADY EXISTS. SKIPPING FUNCTION APP CREATION", funcDetails.Name)
 	}
 
 	return nil
 }
 
-// SetAzureFunctionEnv - sets the environment variables for an azure function app
+// SetAzureFunctionEnv sets the environment variables for an azure function app.
 func SetAzureFunctionEnv(funcDetails CreateFunction) error {
 	color.Cyan("AZ FUNCTIONAPP SETTINGS | UPDATING SETTINGS FOR FUNCTIONAPP %s", funcDetails.Name)
 
-	cmd := exec.Command("az", "functionapp", "config", "appsettings", "set", "--name", funcDetails.Name, "--resource-group", funcDetails.ResourceGroup, "--settings")
+	cmd := exec.Command("az", "functionapp", "config", "appsettings", "set",
+		"--name", funcDetails.Name,
+		"--resource-group", funcDetails.ResourceGroup,
+		"--settings",
+	)
 
 	for _, setting := range funcDetails.Settings {
-		arg := fmt.Sprintf("%s=\"%s\"", setting.Name, setting.Value)
-		cmd.Args = append(cmd.Args, arg)
+		// Bug fix: pass name=value directly — exec.Command does not involve a shell,
+		// so no quoting is needed. Adding literal '"' chars here would corrupt the value.
+		cmd.Args = append(cmd.Args, setting.Name+"="+setting.Value)
 	}
 
-	_, settingsErr := cmd.Output()
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
 
-	if settingsErr != nil {
-		return settingsErr
+	if _, err := cmd.Output(); err != nil {
+		return fmt.Errorf("az functionapp config appsettings set: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
+
 	color.Green("AZ FUNCTIONAPP SETTINGS | SETTINGS FOR FUNCTIONAPP %s UPDATED SUCCESSFULLY", funcDetails.Name)
-
 	return nil
 }
 
-func getFunctionApps() error {
+// getFunctionApps fetches all function apps and returns a fresh slice.
+// It is safe to call concurrently — no shared state is written.
+func getFunctionApps() ([]FunctionApp, error) {
+	var stderrBuf bytes.Buffer
+	cmd := exec.Command("az", "functionapp", "list")
+	cmd.Stderr = &stderrBuf
 
-	funcAppListOut, funcAppErr := exec.Command("az", "functionapp", "list").Output()
-
-	if funcAppErr != nil {
-		return funcAppErr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("az functionapp list: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 
-	unMarshalErr := json.Unmarshal(funcAppListOut, &functionApps)
-
-	if unMarshalErr != nil {
-		return unMarshalErr
+	var functionApps []FunctionApp
+	if err := json.Unmarshal(out, &functionApps); err != nil {
+		return nil, fmt.Errorf("az functionapp list: failed to parse response: %w", err)
 	}
-
-	return nil
+	return functionApps, nil
 }
 
-func functionAppExists(faName string) (bool, error) {
-	exists := false
-
-	if functionApps == nil {
-		return exists, errors.New("Resource Groups not initialized yet")
-	}
-
+func functionAppExists(functionApps []FunctionApp, name string) bool {
 	for _, fa := range functionApps {
-		if fa.Name == faName {
-			exists = true
-			break
+		if fa.Name == name {
+			return true
 		}
 	}
-
-	return exists, nil
+	return false
 }
 
 func createFunctionApp(funcDetails CreateFunction) (FunctionApp, error) {
 	var functionApp FunctionApp
+	var stderrBuf bytes.Buffer
 
-	funcOut, funcErr := exec.Command("az", "functionapp", "create", "--resource-group", funcDetails.ResourceGroup, "--consumption-plan-location", funcDetails.Location, "--runtime", funcDetails.ResourceGroup, "--os-type", funcDetails.Os, "--functions-version", "4", "--name", funcDetails.Name, "--storage-account", funcDetails.StorageAccount).Output()
+	cmd := exec.Command("az", "functionapp", "create",
+		"--resource-group", funcDetails.ResourceGroup,
+		"--consumption-plan-location", funcDetails.Location,
+		"--runtime", funcDetails.Runtime, // Bug fix: was funcDetails.ResourceGroup
+		"--os-type", funcDetails.Os,
+		"--functions-version", "4",
+		"--name", funcDetails.Name,
+		"--storage-account", funcDetails.StorageAccount,
+	)
+	cmd.Stderr = &stderrBuf
 
-	if funcErr != nil {
-		return functionApp, funcErr
+	out, err := cmd.Output()
+	if err != nil {
+		return functionApp, fmt.Errorf("az functionapp create: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
 	}
 
-	unmarshalErr := json.Unmarshal(funcOut, &functionApp)
-
-	if unmarshalErr != nil {
-		return functionApp, unmarshalErr
+	if err := json.Unmarshal(out, &functionApp); err != nil {
+		return functionApp, fmt.Errorf("az functionapp create: failed to parse response: %w", err)
 	}
-
 	return functionApp, nil
 }
