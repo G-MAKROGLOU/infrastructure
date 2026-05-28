@@ -11,7 +11,7 @@ type (
 		Name             string        `json:"name"`
 		State            string        `json:"state"`
 		TenantID         string        `json:"tenantId"`
-		User             user          `json:"user,squash"`
+		User             user          `json:"user"`
 	}
 
 	user struct {

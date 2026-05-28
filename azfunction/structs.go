@@ -17,7 +17,7 @@ type (
 		Enabled                     bool                          `json:"enabled"`
 		EnabledHostNames            []string                      `json:"enabledHostNames"`
 		ExtendedLocation            interface{}                   `json:"extendedLocation"`
-		HostNameSslStates           []functionAppHostNameSslState `json:"hostNameSslStates,squash"`
+		HostNameSslStates           []functionAppHostNameSslState `json:"hostNameSslStates"`
 		HostNames                   []string                      `json:"hostNames"`
 		HostNamesDisabled           bool                          `json:"hostNamesDisabled"`
 		HostingEnvironmentProfile   interface{}                   `json:"hostingEnvironmentProfile"`
@@ -42,7 +42,7 @@ type (
 		Reserved                    bool                          `json:"reserved"`
 		ResourceGroup               string                        `json:"resourceGroup"`
 		ScmSiteAlsoStopped          bool                          `json:"scmSiteAlsoStopped"`
-		SiteConfig                  functionAppSiteConfig         `json:"siteConfig,squash"`
+		SiteConfig                  functionAppSiteConfig         `json:"siteConfig"`
 		SlotSwapStatus              interface{}                   `json:"slotSwapStatus"`
 		State                       string                        `json:"state"`
 		StorageAccountRequired      bool                          `json:"storageAccountRequired"`

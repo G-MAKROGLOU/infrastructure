@@ -45,9 +45,7 @@ func QueuePipeline(pipelineInfo PipelineCreate, parameters []string) (PipelineQu
 
 	if len(parameters) > 0 {
 		cmd.Args = append(cmd.Args, "--parameters")
-		for _, param := range parameters {
-			cmd.Args = append(cmd.Args, param)
-		}
+		cmd.Args = append(cmd.Args, parameters...)
 	}
 
 	var stderrBuf bytes.Buffer
