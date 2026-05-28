@@ -34,6 +34,37 @@ func CreateAzureStorageAccount(details StorageAccountCreate) error {
 	return nil
 }
 
+// DeleteAzureStorageAccount deletes an Azure Storage Account.
+// It is a no-op if the storage account does not exist.
+func DeleteAzureStorageAccount(name, resourceGroup string) error {
+	color.Cyan("AZ STORAGE ACCOUNT | DELETING STORAGE ACCOUNT %s", name)
+
+	storageAccounts, err := getStorageAccounts()
+	if err != nil {
+		return err
+	}
+
+	if !storageAccountExists(storageAccounts, name) {
+		color.Yellow("AZ STORAGE ACCOUNT | STORAGE ACCOUNT %s DOES NOT EXIST. SKIPPING DELETION", name)
+		return nil
+	}
+
+	var stderrBuf bytes.Buffer
+	cmd := exec.Command("az", "storage", "account", "delete",
+		"--name", name,
+		"--resource-group", resourceGroup,
+		"--yes",
+	)
+	cmd.Stderr = &stderrBuf
+
+	if _, err := cmd.Output(); err != nil {
+		return fmt.Errorf("az storage account delete: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
+	}
+
+	color.Green("AZ STORAGE ACCOUNT | STORAGE ACCOUNT %s DELETED SUCCESSFULLY", name)
+	return nil
+}
+
 // getStorageAccounts fetches all storage accounts and returns a fresh slice.
 // It is safe to call concurrently — no shared state is written.
 func getStorageAccounts() ([]StorageAccount, error) {

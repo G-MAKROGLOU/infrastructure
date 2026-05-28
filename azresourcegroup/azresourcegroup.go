@@ -62,6 +62,23 @@ func resourceGroupExists(resourceGroups []ResourceGroup, name string) bool {
 	return false
 }
 
+// DeleteAzureResourceGroup deletes a resource group and every resource inside it (cascade).
+// This is intentionally destructive — only call this when a full teardown is desired.
+func DeleteAzureResourceGroup(name string) error {
+	color.Cyan("AZ RESOURCE GROUP | DELETING RESOURCE GROUP %s (cascade)", name)
+
+	var stderrBuf bytes.Buffer
+	cmd := exec.Command("az", "group", "delete", "--name", name, "--yes")
+	cmd.Stderr = &stderrBuf
+
+	if _, err := cmd.Output(); err != nil {
+		return fmt.Errorf("az group delete: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
+	}
+
+	color.Green("AZ RESOURCE GROUP | RESOURCE GROUP %s DELETED SUCCESSFULLY", name)
+	return nil
+}
+
 func createResourceGroup(details ResourceGroupCreate) (ResourceGroup, error) {
 	var resourceGroup ResourceGroup
 	var stderrBuf bytes.Buffer

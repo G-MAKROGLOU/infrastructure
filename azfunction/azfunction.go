@@ -61,6 +61,36 @@ func SetAzureFunctionEnv(funcDetails CreateFunction) error {
 	return nil
 }
 
+// DeleteAzureFunction deletes an Azure Function App.
+// It is a no-op if the function app does not exist.
+func DeleteAzureFunction(name, resourceGroup string) error {
+	color.Cyan("AZ FUNCTIONAPP | DELETING FUNCTIONAPP %s", name)
+
+	functionApps, err := getFunctionApps()
+	if err != nil {
+		return err
+	}
+
+	if !functionAppExists(functionApps, name) {
+		color.Yellow("AZ FUNCTIONAPP | FUNCTIONAPP %s DOES NOT EXIST. SKIPPING DELETION", name)
+		return nil
+	}
+
+	var stderrBuf bytes.Buffer
+	cmd := exec.Command("az", "functionapp", "delete",
+		"--name", name,
+		"--resource-group", resourceGroup,
+	)
+	cmd.Stderr = &stderrBuf
+
+	if _, err := cmd.Output(); err != nil {
+		return fmt.Errorf("az functionapp delete: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
+	}
+
+	color.Green("AZ FUNCTIONAPP | FUNCTIONAPP %s DELETED SUCCESSFULLY", name)
+	return nil
+}
+
 // getFunctionApps fetches all function apps and returns a fresh slice.
 // It is safe to call concurrently — no shared state is written.
 func getFunctionApps() ([]FunctionApp, error) {

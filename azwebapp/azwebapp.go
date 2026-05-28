@@ -34,6 +34,36 @@ func CreateAzureWebApp(details WebAppCreate) error {
 	return nil
 }
 
+// DeleteAzureWebApp deletes an Azure Web App.
+// It is a no-op if the web app does not exist.
+func DeleteAzureWebApp(name, resourceGroup string) error {
+	color.Cyan("AZ WEBAPP | DELETING WEBAPP %s", name)
+
+	webApps, err := getWebApps()
+	if err != nil {
+		return err
+	}
+
+	if !webAppExists(webApps, name) {
+		color.Yellow("AZ WEBAPP | WEBAPP %s DOES NOT EXIST. SKIPPING DELETION", name)
+		return nil
+	}
+
+	var stderrBuf bytes.Buffer
+	cmd := exec.Command("az", "webapp", "delete",
+		"--name", name,
+		"--resource-group", resourceGroup,
+	)
+	cmd.Stderr = &stderrBuf
+
+	if _, err := cmd.Output(); err != nil {
+		return fmt.Errorf("az webapp delete: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
+	}
+
+	color.Green("AZ WEBAPP | WEBAPP %s DELETED SUCCESSFULLY", name)
+	return nil
+}
+
 // getWebApps fetches all web apps and returns a fresh slice.
 // It is safe to call concurrently — no shared state is written.
 func getWebApps() ([]WebApp, error) {

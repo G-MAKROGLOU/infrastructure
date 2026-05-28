@@ -34,6 +34,37 @@ func CreateAzureAppServicePlan(aspDetails AppServicePlanCreate) error {
 	return nil
 }
 
+// DeleteAzureAppServicePlan deletes an Azure App Service Plan.
+// It is a no-op if the plan does not exist.
+func DeleteAzureAppServicePlan(name, resourceGroup string) error {
+	color.Cyan("AZ APPSERVICE | DELETING APP SERVICE PLAN %s", name)
+
+	appServicePlans, err := getAppServicePlans()
+	if err != nil {
+		return err
+	}
+
+	if !appServicePlanExists(appServicePlans, name) {
+		color.Yellow("AZ APPSERVICE | APP SERVICE PLAN %s DOES NOT EXIST. SKIPPING DELETION", name)
+		return nil
+	}
+
+	var stderrBuf bytes.Buffer
+	cmd := exec.Command("az", "appservice", "plan", "delete",
+		"--name", name,
+		"--resource-group", resourceGroup,
+		"--yes",
+	)
+	cmd.Stderr = &stderrBuf
+
+	if _, err := cmd.Output(); err != nil {
+		return fmt.Errorf("az appservice plan delete: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
+	}
+
+	color.Green("AZ APPSERVICE | APP SERVICE PLAN %s DELETED SUCCESSFULLY", name)
+	return nil
+}
+
 // getAppServicePlans fetches all app service plans and returns a fresh slice.
 // It is safe to call concurrently — no shared state is written.
 func getAppServicePlans() ([]AppServicePlan, error) {

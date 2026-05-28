@@ -92,6 +92,46 @@ func GetPipelineStatus(organization string, project string, pipelineID int) (Pip
 	return pipelineStatus, nil
 }
 
+// DeletePipeline deletes an Azure DevOps pipeline by name.
+// It is a no-op if the pipeline does not exist.
+func DeletePipeline(org, project, name string) error {
+	color.Cyan("AZ PIPELINES | DELETING PIPELINE %s", name)
+
+	pipelines, err := getPipelines(org, project)
+	if err != nil {
+		return err
+	}
+
+	id := -1
+	for _, p := range pipelines {
+		if p.Name == name {
+			id = p.ID
+			break
+		}
+	}
+
+	if id == -1 {
+		color.Yellow("AZ PIPELINES | PIPELINE %s NOT FOUND. SKIPPING DELETION", name)
+		return nil
+	}
+
+	var stderrBuf bytes.Buffer
+	cmd := exec.Command("az", "pipelines", "delete",
+		"--id", strconv.Itoa(id),
+		"--organization", org,
+		"--project", project,
+		"--yes",
+	)
+	cmd.Stderr = &stderrBuf
+
+	if _, err := cmd.Output(); err != nil {
+		return fmt.Errorf("az pipelines delete: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
+	}
+
+	color.Green("AZ PIPELINES | PIPELINE %s DELETED SUCCESSFULLY", name)
+	return nil
+}
+
 // getPipelines fetches all pipelines for the given org/project and returns a fresh slice.
 // It is safe to call concurrently — no shared state is written.
 func getPipelines(devopsOrg string, project string) ([]Pipeline, error) {
