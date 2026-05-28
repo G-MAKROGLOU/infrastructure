@@ -19,14 +19,14 @@ type (
 		AutoProvision bool               `json:"autoProvision"`
 		AutoSize      bool               `json:"autoSize"`
 		AutoUpdate    bool               `json:"autoUpdate"`
-		CreatedBy     agentPoolCreatedBy `json:"createdBy,squash"`
+		CreatedBy     agentPoolCreatedBy `json:"createdBy"`
 		CreatedOn     time.Time          `json:"createdOn"`
 		ID            int                `json:"id"`
 		IsHosted      bool               `json:"isHosted"`
 		IsLegacy      bool               `json:"isLegacy"`
 		Name          string             `json:"name"`
 		Options       string             `json:"options"`
-		Owner         agentPoolOwner     `json:"owner,squash"`
+		Owner         agentPoolOwner     `json:"owner"`
 		PoolType      string             `json:"poolType"`
 		Properties    interface{}        `json:"properties"`
 		Scope         string             `json:"scope"`

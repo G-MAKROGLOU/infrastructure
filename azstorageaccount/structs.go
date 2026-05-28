@@ -66,12 +66,12 @@ type (
 		KeySource                       string                           `json:"keySource"`
 		KeyVaultProperties              interface{}                      `json:"keyVaultProperties"`
 		RequireInfrastructureEncryption interface{}                      `json:"requireInfrastructureEncryption"`
-		Services                        storageAccountEncryptionServices `json:"services,squash"`
+		Services                        storageAccountEncryptionServices `json:"services"`
 	}
 
 	storageAccountEncryptionServices struct {
-		Blob  storageAccountEncryptionService `json:"blob,squash"`
-		File  storageAccountEncryptionService `json:"file,squash"`
+		Blob  storageAccountEncryptionService `json:"blob"`
+		File  storageAccountEncryptionService `json:"file"`
 		Queue interface{}                     `json:"queue"`
 		Table interface{}                     `json:"table"`
 	}

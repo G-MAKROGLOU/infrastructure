@@ -13,7 +13,7 @@ type (
 		ManagedBy  string                  `json:"managedBy"`
 		Name       string                  `json:"name"`
 		Tags       []string                `json:"tags"`
-		Properties resourceGroupProperties `json:"properties,squash"`
+		Properties resourceGroupProperties `json:"properties"`
 		Type       string                  `json:"type"`
 	}
 
